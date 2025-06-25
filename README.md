@@ -118,24 +118,3 @@ $ breeze scenarios --task "task_string"
     ➤ Login to system
         • Enter Mobile Number
 ```
-
----
-
-## 🧪 Development
-
-To contribute or run locally:
-
-```bash
-git clone https://github.com/your-username/breeze-cli.git
-cd breeze-cli
-npm install
-npm link
-```
-
-You can now use the `breeze` command locally.
-
----
-
-## 📃 License
-
-MIT © 2025 Your Name
