@@ -1,0 +1,25 @@
+{
+  "name": "breezeai",
+  "version": "1.0.0",
+  "description": "breeze ai cli agent",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "bin": {
+    "breeze": "./index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.33",
+    "@clack/prompts": "^0.11.0",
+    "@inquirer/prompts": "^7.5.3",
+    "axios": "^1.10.0",
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "ora": "^8.2.0",
+    "uuid": "^11.1.0"
+  }
+}
