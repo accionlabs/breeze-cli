@@ -87,6 +87,16 @@ Retrieve project-specific scenarios.
 
 ---
 
+###  Generate code
+
+```bash
+breeze generate frontend --requirement "user_prompt" --design "absolute_path_designs" --output "absolute_path_generated_code"
+```
+Generate frontend code to output path using prompt and design files.
+
+---
+
+
 ## ⚙️ Configuration
 
 Breeze stores your credentials locally (usually in a `.breeze/.config` or similar file). To update your keys:
@@ -106,15 +116,17 @@ $ breeze init
 ✔ Enter your Project Key: ******
 
 $ breeze list personas
-👤 Alice 
-👤 Bob 
+👤 Driver 
+👤 Applicant 
 
-$ breeze list tasks --persona "persona_string"
+$ breeze list tasks --persona "Driver"
 📌  User Login Flow
 📌  Payment Gateway Integration
 
-$ breeze scenarios --task "task_string"
-🔹 New User Onboarding
+$ breeze scenarios --task "Driver registration using mobile number"
+🔹 New Driver Onboarding
     ➤ Login to system
         • Enter Mobile Number
+$ breeze generate frontend --requirement "Generate driver registration form" --design "design_path" --output "output_path"
+
 ```
