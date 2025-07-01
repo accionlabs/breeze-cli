@@ -5,6 +5,7 @@ import init from './commands/config_init.js';
 import config_commands from './commands/config_commands.js';
 import list_commands from './commands/list_commands.js';
 import generate_commands from './commands/generate_commands.js';
+import import_command from './commands/import_command.js';
 
 const program = new Command();
 
@@ -23,5 +24,7 @@ program.addCommand(config_commands)
 program.addCommand(list_commands);
 
 program.addCommand(generate_commands);
+
+program.addCommand(import_command);
 
 program.parse();
