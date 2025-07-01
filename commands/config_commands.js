@@ -96,7 +96,7 @@ async function config_delete() {
 
         await new Promise((res) => setTimeout(res, 1000));
         // Simulate setup (replace with real logic)
-        console.log(chalk.green(`\n✅ Configuration has been deleted`)); JMN
+        console.log(chalk.green(`\n✅ Configuration has been deleted`));
     } catch (error) {
         console.log(chalk.red('❌ Error :::', error.message));
         process.exit(0);
