@@ -3,13 +3,12 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-
+import config from '../config.js';
 const importBreeze = async (args) => {
         try {
             let project_config_details = fs.readFileSync('./.breeze/.config');
             let proj_data = JSON.parse(project_config_details);
-            const url = `https://isometric-backend.accionbreeze.com/semantic-model/get-screen?projectuuid=${proj_data.project_key}&websiteId=${args.websiteId}&screenId=${args.screenId}`;
-            console.log(chalk.blue(`🔗 Fetching data from: ${url}`));
+            const url = `${config.ISOMETRIC_API_URL}/semantic-model/get-screen?projectuuid=${proj_data.project_key}&websiteId=${args.websiteId}&screenId=${args.screenId}`;
             const response = await axios.get(url, {
                 headers: {
                     "Content-Type": "application/json",
@@ -21,33 +20,52 @@ const importBreeze = async (args) => {
             // }
             // const outputPath = path.join(args.directory, `${args.screenId}.json`);
             // fs.writeFileSync(outputPath, JSON.stringify(response.data, null, 2));
-            for(let resource of response.data?.resources)  {
-                const resourceDirectory = `${args.directory}/resources`
-                if(resource?.type === 'screenshot' || resource?.type === 'layout_json' ) {
-                    if(!fs.existsSync(resourceDirectory)) {
-                        fs.mkdirSync(resourceDirectory, { recursive: true });
-                    }
-                    const filekey = `${resource?.s3Url.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
-                    console.log(chalk.blue(`🔗 File Key ${filekey}`));
-                    const signedUrlAPI = `https://isometric-backend.accionbreeze.com/documents/get-signed-url/${encodeURIComponent(filekey)}`;
-                    const signedUrlResponse = await axios.get(signedUrlAPI, {
-                        headers: {
-                            "Content-Type": "application/json",
-                            "api-key": `${proj_data.api_key}`
-                        }
-                    });
-                    
-                    const outputPath = path.join(resourceDirectory, resource?.fileName);
-                    console.log(chalk.blue(`🔗 Downloading file from: ${signedUrlResponse.data}`));
-                    await downloadFile(signedUrlResponse.data, outputPath);
-                    console.log(chalk.green(`✅ Response saved to ${outputPath}`));
-                }
+            const resourceDirectory = `${args.directory}/${response.data?.name}`
+            if(!fs.existsSync(resourceDirectory)) {
+                fs.mkdirSync(resourceDirectory, { recursive: true });
+            }
+            const assetsDirectory = path.join(resourceDirectory, 'assets');
+            if(!fs.existsSync(assetsDirectory)) {
+                fs.mkdirSync(assetsDirectory, { recursive: true });
             }
             
+            // saving resources and assets in directory
+            await saveResource(response, resourceDirectory, assetsDirectory);
+
+            // saving tasks in the directory
+            const outputTaskPath = path.join(resourceDirectory, `tasks.text`);
+            fs.writeFileSync(outputTaskPath, JSON.stringify(response.data?.tasks, null, 2));
+
+
+            let prompt = `Generate a ${response.data?.type} screen named "${response.data?.name}" using layouts (JSON) and screenshots (images) from "${resourceDirectory}", and assets from "${assetsDirectory}". The screen should accomplish the tasks defined in "${outputTaskPath}".`;
+            if (response.data?.metadata?.route) {
+                prompt += ` Use the route "${response.data.metadata.route}".`;
+            }
+            console.log(chalk.greenBright(`\n📝 Generated Prompt:\n${prompt}\n`));
         } catch (error) {
             console.log(chalk.red('❌ Error ::: ', error));
             process.exit(1);
         }
+    }
+
+    async function saveResource(response, resourceDirectory, assetsDirectory) {
+        for(let resource of response.data?.resources)  {
+                const filekey = `${resource?.s3Url.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
+                console.log(chalk.blue(`🔗 File Key ${filekey}`));
+                const signedUrlAPI = `${config.ISOMETRIC_API_URL}/documents/get-signed-url/${encodeURIComponent(filekey)}`;
+                const signedUrlResponse = await axios.get(signedUrlAPI, {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "api-key": `${proj_data.api_key}`
+                    }
+                });
+                let outDirectory = resourceDirectory
+                if(resource?.type === 'icon') {
+                    outDirectory = assetsDirectory
+                }
+                const outputPath = path.join(outDirectory, resource?.fileName);
+                await downloadFile(signedUrlResponse.data, outputPath);
+            }
     }
 
 
@@ -66,14 +84,14 @@ async function downloadFile(fileUrl, outputLocationPath) {
 
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
-        console.log(`File downloaded to ${outputLocationPath}`);
         resolve();
       });
       writer.on('error', reject);
     });
 
   } catch (error) {
-    console.error(`Failed to download file: ${error.message}`);
+    console.log(chalk.red('❌ Error while downloading file ::: ', error));
+    process.exit(1);
   }
 }
 
