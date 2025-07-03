@@ -6,6 +6,7 @@ import path, { dirname } from 'path';
 import { query } from '@anthropic-ai/claude-code';
 import { fileURLToPath } from 'url';
 import { v4 } from 'uuid';
+import ora from 'ora';
 
 
 const generate = new Command('generate').description('generate frontend and backend project code');
@@ -15,7 +16,7 @@ const __dirname = dirname(__filename);
 async function generate_frontend_code(args) {
     try {
         //check claude.md file exists
-        
+
         let claudepath = path.join(__dirname, "../CLAUDE.md")
         if (!fs.existsSync(claudepath)) {
             console.log(chalk.red('❌ CLAUDE.md file does not exist'));
@@ -41,16 +42,24 @@ async function generate_frontend_code(args) {
         console.log(chalk.greenBright(`${modifiedPrompt}`))
         let proceedWithClaudecode = await confirm({ message: "Do you want to continue to execute Claude code with above prompt?" })
         if (proceedWithClaudecode) {
-            let messages = []
-            for await (const message of query({
+            const spin = ora().start()
+            spin.color = "magenta"
+            spin.prefixText = "Processing"
+            spin.spinner = "simpleDots"
+            for await (const sdkmessage of query({
                 prompt: modifiedPrompt,
                 abortController: new AbortController(),
                 options: {
-                    allowedTools:["Read", "Write", "Bash","Edit","LS","TodoWrite","TodoRead"]
+                    allowedTools: ["Read", "Write", "Bash", "Edit", "LS", "TodoWrite", "TodoRead"]
                 },
             })) {
-               messages.push(message)
+                if (sdkmessage.type == "assistant" && sdkmessage.message.content[0].type == "text") {
+                    spin.stop()
+                    console.log(chalk.cyan(sdkmessage.message.content[0].text));
+                    spin.start()
+                }
             }
+            spin.stop()
         }
 
         //process.exit(0);
