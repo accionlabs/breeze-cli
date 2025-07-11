@@ -9,12 +9,12 @@ export LLM_MODEL_PROVIDER=google_genai
 export GOOGLE_API_KEY="test"
  
 export TESTCASES_REPO_NAME=testcases
-export TESTCASES_REPO_GIT_TOKEN=<test>
+export TESTCASES_REPO_GIT_TOKEN=process.env.gittoken
 export TESTCASES_REPO_OWNER=rushiaccion
 export TESTCASES_GIT_PLATFORM=github
  
 export PLAYWRIGHT_REPO_NAME=playwright
-export PLAYWRIGHT_REPO_GIT_TOKEN=<test>
+export PLAYWRIGHT_REPO_GIT_TOKEN=process.env.gittoken
 export PLAYWRIGHT_REPO_OWNER=rushiaccion
 export PLAYWRIGHT_GIT_PLATFORM=github
 export PLAYWRIGHT_REPO_BRANCH_NAME=main
