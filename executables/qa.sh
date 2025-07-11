@@ -6,15 +6,15 @@ $ROOT_PATH/qa/bin/pip install --force-reinstall $ROOT_PATH/plugins/atdd-0.1.0-py
 
 export LLM_MODEL=gemini-2.0-flash-thinking-exp-1219
 export LLM_MODEL_PROVIDER=google_genai
-export GOOGLE_API_KEY="AIzaSyA9cgWcAqo5-tfKFKROXcUAeK-URHW1ZRI"
+export GOOGLE_API_KEY="test"
  
 export TESTCASES_REPO_NAME=testcases
-export TESTCASES_REPO_GIT_TOKEN=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
+export TESTCASES_REPO_GIT_TOKEN=test
 export TESTCASES_REPO_OWNER=rushiaccion
 export TESTCASES_GIT_PLATFORM=github
  
 export PLAYWRIGHT_REPO_NAME=playwright
-export PLAYWRIGHT_REPO_GIT_TOKEN=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
+export PLAYWRIGHT_REPO_GIT_TOKEN=test
 export PLAYWRIGHT_REPO_OWNER=rushiaccion
 export PLAYWRIGHT_GIT_PLATFORM=github
 export PLAYWRIGHT_REPO_BRANCH_NAME=main
