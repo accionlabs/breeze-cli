@@ -5,13 +5,12 @@ import path from 'path';
 import axios from 'axios';
 import config from '../config.js';
 import { confirm } from '@inquirer/prompts';
-import { confirm } from '@inquirer/prompts';
 import { query } from '@anthropic-ai/claude-code';
 import ora from 'ora';
+import { fetchConfiguration } from '../utils/common_utils.js';
 const importBreeze = async (args) => {
     try {
-        let project_config_details = fs.readFileSync('./.breeze/.config');
-        let proj_data = JSON.parse(project_config_details);
+        let proj_data = await fetchConfiguration();
         const url = `${config.ISOMETRIC_API_URL}/semantic-model/get-screen?projectuuid=${proj_data.project_key}&websiteId=${args.websiteId}&screenId=${args.screenId}`;
         const response = await axios.get(url, {
             headers: {
@@ -100,7 +99,7 @@ const importBreeze = async (args) => {
             spin.prefixText = "Processing"
             spin.spinner = "simpleDots"
             let messages = []
-            for await (const message of query({
+            for await (const sdkmessage of query({
                 prompt: prompt,
                 abortController: new AbortController(),
                 options: {
@@ -116,7 +115,7 @@ const importBreeze = async (args) => {
             spin.stop()
         }
     } catch (error) {
-        console.log(chalk.red('❌ Error ::: ', error));
+        console.log(chalk.red('❌ Error ::: ', error.message));
         process.exit(1);
     }
 }

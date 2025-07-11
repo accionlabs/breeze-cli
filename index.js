@@ -6,6 +6,7 @@ import config_commands from './commands/config_commands.js';
 import list_commands from './commands/list_commands.js';
 import generate_commands from './commands/generate_commands.js';
 import import_command from './commands/import_command.js';
+import qa_command from './commands/qa_commands.js'
 
 const program = new Command();
 
@@ -26,5 +27,7 @@ program.addCommand(list_commands);
 program.addCommand(generate_commands);
 
 program.addCommand(import_command);
+
+program.addCommand(qa_command);
 
 program.parse();
