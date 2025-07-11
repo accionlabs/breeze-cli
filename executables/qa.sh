@@ -21,4 +21,4 @@ export PLAYWRIGHT_REPO_BRANCH_NAME=main
 export PLAYWRIGHT_BRANCH_TO_PUSH=test
 export PLAYWRIGHT_OUTPUT_DIR=/home/anil/qa_output
 
-$ROOT_PATH/qa/bin/playwright_codegen
+$ROOT_PATH/qa/bin/playwright-codegen
