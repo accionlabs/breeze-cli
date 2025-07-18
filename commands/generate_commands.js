@@ -19,6 +19,7 @@ async function generate_frontend_code(args) {
     try {
         //check claude.md file exists
         let claudeFileValidation = await validateFileExists('CLAUDE.md');
+        console.log(chalk.blueBright('CLAUDE.md file validation status: ', claudeFileValidation));
         if (!claudeFileValidation) process.exit(0);
         let proj_data = await fetchConfiguration();
         let prompt;
@@ -97,10 +98,79 @@ async function generate_frontend_code(args) {
             // saving resources and assets in directory
             await saveResource(response, resourceDirectory, assetsDirectory, proj_data);
 
-            // saving tasks in the directory
+            // Fetch project details to get unified model
+            const fetchProjectDetails = await httpRequests({
+                url: `${config.ISOMETRIC_API_URL}/semantic-model/byUUID/${proj_data.project_key}`,
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": `${proj_data.api_key}`
+                }
+            });
+
+            let enhancedTasks = [];
+            
+            // Enhanced task processing with unified model matching
+            let formattedTasksContent = '';
+            
+            if (tasks && tasks.length > 0) {
+                const unifiedModel = fetchProjectDetails.data?.qum_specs?.unified_model || [];
+                
+                // Process each task
+                tasks.forEach(task => {
+                    // Add task as header
+                    formattedTasksContent += `${task}\n`;
+                    
+                    // Search through unified model for matching outcomes
+                    unifiedModel.forEach(persona => {
+                        if (persona.outcomes) {
+                            persona.outcomes.forEach(outcome => {
+                                // Check if task matches outcome (case-insensitive partial match)
+                                if (task && outcome.outcome && 
+                                    (task.toLowerCase().includes(outcome.outcome.toLowerCase()) || 
+                                     outcome.outcome.toLowerCase().includes(task.toLowerCase()))) {
+                                    
+                                    // Process scenarios for this outcome
+                                    if (outcome.scenarios && outcome.scenarios.length > 0) {
+                                        outcome.scenarios.forEach(scenario => {
+                                            // Add scenario description with diamond bullet
+                                            formattedTasksContent += `🔹${scenario.scenario}\n`;
+                                            
+                                            // Process steps for this scenario
+                                            if (scenario.steps && scenario.steps.length > 0) {
+                                                scenario.steps.forEach(step => {
+                                                    // Add step with arrow and tab
+                                                    formattedTasksContent += `\t➤ ${step.step}\n`;
+                                                    
+                                                    // Process actions for this step
+                                                    if (step.actions && step.actions.length > 0) {
+                                                        step.actions.forEach(action => {
+                                                            // Add action with bullet and double tab
+                                                            formattedTasksContent += `\t\t• ${action.action}\n`;
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    
+                    // Add extra line break between tasks
+                    formattedTasksContent += '\n';
+                });
+            }
+
+            // saving formatted tasks in the directory
             const outputTaskPath = path.join(resourceDirectory, `tasks.text`);
-            fs.writeFileSync(outputTaskPath, JSON.stringify(response.data?.tasks, null, 2));
-            prompt = `Generate a ${response.data?.type} screen named "${response.data?.name}" using layouts (JSON) and screenshots (images) from "${resourceDirectory}", and assets from "${assetsDirectory}". The screen should accomplish the tasks defined in "${outputTaskPath}".`;
+            fs.writeFileSync(outputTaskPath, formattedTasksContent);
+            
+            console.log(chalk.green(`✅ Formatted tasks saved to: ${outputTaskPath}`));
+            console.log(chalk.blue(`📊 Total tasks processed: ${tasks.length}`));
+            
+            prompt = `Generate a ${response.data?.type} screen named "${response.data?.name}" using layouts (JSON) and screenshots (images) from "${resourceDirectory}", and assets from "${assetsDirectory}". The screen should accomplish the tasks defined in the directory "${outputTaskPath}".`;
             if (response.data?.metadata?.route) {
                 prompt += ` Use the route "${response.data.metadata.route}".`;
             }
