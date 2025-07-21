@@ -62,6 +62,24 @@ const importBreeze = async (args) => {
         } else {
             console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
         }
+
+        const mockupDocumentId = response.data?.mockupDocumentId;
+        if(mockupDocumentId) {
+            console.log(chalk.green('✅ Mockup found.'));
+            const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
+            const mockupResponse = await axios.get(mockupDocumentUrl, {
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": `${proj_data.api_key}`
+                }
+            });
+            const mockupFileurl = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
+            const mockupHTML = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
+            const mockupName = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
+            await saveMockupScreenShot(mockupFileurl, args.directory, proj_data);
+            saveMockupHTML(mockupHTML, args.directory, mockupName);
+        }
+        
         // --- Validation logic end ---
 
         // Ask user if they want to proceed
@@ -119,6 +137,26 @@ const importBreeze = async (args) => {
         process.exit(1);
     }
 }
+
+async function saveMockupScreenShot(fileUrl, resourceDirectory, proj_data) {
+    const filekey = `${fileUrl.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
+    console.log(chalk.blue(`🔗 File Key ${filekey}`));
+    const signedUrlAPI = `${config.ISOMETRIC_API_URL}/documents/get-signed-url/${encodeURIComponent(filekey)}`;
+        const signedUrlResponse = await axios.get(signedUrlAPI, {
+            headers: {
+                "Content-Type": "application/json",
+                "api-key": `${proj_data.api_key}`
+            }
+        });
+        const outputPath = path.join(resourceDirectory, filekey.split('/').pop());
+        await downloadFile(signedUrlResponse.data, outputPath);
+}
+
+async function saveMockupHTML(html, resourceDirectory, name) {
+    const outputPath = path.join(resourceDirectory, `${name}.html`);
+    fs.writeFileSync(outputPath, html);
+    console.log(chalk.green(`✅ Mockup HTML saved to ${outputPath}`));
+}   
 
 async function saveResource(response, resourceDirectory, assetsDirectory, proj_data) {
     for (let resource of response.data?.resources) {
