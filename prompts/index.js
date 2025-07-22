@@ -1,8 +1,22 @@
 import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const figmaCodeGeneraionPropt = fs.readFileSync("./prompts/figma-code-generation.md", "utf8");
-const htmlCodeGeneraionPropt = fs.readFileSync("./prompts/html-code-generation.md", "utf8");
-const mockupCodeGenerationPrompt = fs.readFileSync("./prompts/mockup-code-generation.md", "utf8");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const figmaCodeGeneraionPropt = fs.readFileSync(
+  path.join(__dirname, "figma-code-generation.md"),
+  "utf8"
+);
+const htmlCodeGeneraionPropt = fs.readFileSync(
+  path.join(__dirname, "html-code-generation.md"),
+  "utf8"
+);
+const mockupCodeGenerationPrompt = fs.readFileSync(
+  path.join(__dirname, "mockup-code-generation.md"),
+  "utf8"
+);
 
 export function getPrompt(type = "figma", placeholders) {
     let prompt;
