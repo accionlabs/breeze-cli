@@ -48,7 +48,7 @@ function validateFromType(args, flags, response) {
   }
   if (args.from === "html") {
     if (!flags.hasHTML) {
-      console.log(chalk.red("❌ Error: For --from html, HTML resource is required."));
+      console.log(chalk.red("❌ Error: code generation from HTML, HTML resource is required."));
       process.exit(1);
     }
     if (!flags.hasTasks) {
@@ -58,7 +58,7 @@ function validateFromType(args, flags, response) {
   }
   if (args.from === "mockup") {
     if (!flags.mockupDocumentId) {
-      console.log(chalk.red("❌ Error: For --from mockup, mockupDocumentId is required."));
+      console.log(chalk.red("❌ Error: For code generation from mockup, mockup is required. It can be generated in Breeze"));
       process.exit(1);
     }
     return ["icon", "font"];
@@ -114,7 +114,14 @@ async function generate_frontend_code(args) {
         screenId: `${args.screenId}`,
       },
     };
-    const response = await httpRequests(httpArgs);
+    let response 
+    try {
+       response = await httpRequests(httpArgs);
+    } catch (error) {
+        console.log(chalk.red('❌ Error while fetching screen data ::: '));
+        throw error;
+    }
+    
     if (response.data.error) {
       throw new Error(response.data.message);
     }
