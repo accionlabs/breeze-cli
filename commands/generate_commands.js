@@ -13,7 +13,6 @@ import {
   validateFileExists,
 } from "../utils/common_utils.js";
 import config from "../config.js";
-import { get } from "http";
 import { getPrompt } from "../prompts/index.js";
 
 const generate = new Command("generate").description(
@@ -22,12 +21,84 @@ const generate = new Command("generate").description(
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+function getScreenResourceFlags(response) {
+  const resources = response.data?.resources || [];
+  return {
+    hasImage: resources.some((r) => r.type === "screenshot"),
+    hasLayout: resources.some((r) => r.type === "layout_json"),
+    hasHTML: resources.some((r) => r.type === "html"),
+    hasTasks: Array.isArray(response.data?.tasks) && response.data.tasks.length > 0,
+    mockupDocumentId: response.data?.mockupDocumentId,
+    resources,
+    tasks: response.data?.tasks || [],
+    name: response.data?.name,
+  };
+}
+
+function validateFromType(args, flags, response) {
+  if (args.from === "figma") {
+    if (!flags.hasLayout || !flags.hasImage) {
+      console.log(chalk.red("❌ Error: For --from figma, both layout and screenshot are required."));
+      process.exit(1);
+    }
+    if (!flags.hasTasks) {
+      console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+    }
+    return ["screenshot", "layout_json", "icon", "font"];
+  }
+  if (args.from === "html") {
+    if (!flags.hasHTML) {
+      console.log(chalk.red("❌ Error: For --from html, HTML resource is required."));
+      process.exit(1);
+    }
+    if (!flags.hasTasks) {
+      console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+    }
+    return ["screenshot", "html", "icon", "font"];
+  }
+  if (args.from === "mockup") {
+    if (!flags.mockupDocumentId) {
+      console.log(chalk.red("❌ Error: For --from mockup, mockupDocumentId is required."));
+      process.exit(1);
+    }
+    return ["icon", "font"];
+  }
+  return [];
+}
+
+async function handleMockup(response, args, proj_data) {
+  const mockupDocumentId = response.data?.mockupDocumentId;
+  const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
+  const mockupResponse = await axios.get(mockupDocumentUrl, {
+    headers: {
+      "Content-Type": "application/json",
+      "api-key": `${proj_data.api_key}`,
+    },
+  });
+  const mockupFileurl = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
+  const mockupHTML = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
+  const mockupName = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
+  const mockupHasScreenshot = !!mockupFileurl;
+  const mockupHasHTML = !!mockupHTML;
+  if (!mockupHasScreenshot || !mockupHasHTML) {
+    console.log(chalk.red("❌ Error: For --from mockup, both screenshot and HTML are required in the mockup document."));
+    process.exit(1);
+  }
+  if (!Array.isArray(response.data?.tasks) || response.data.tasks.length === 0) {
+    console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+  }
+  const screenShotPath = await saveMockupScreenShot(mockupFileurl, args.directory, proj_data);
+  const htmlFilePath = saveMockupHTML(mockupHTML, args.directory, mockupName);
+  return { screenShotPath, htmlFilePath };
+}
+
 async function generate_frontend_code(args) {
   let spin;
   try {
-    //check claude.md file exists
+    // Check CLAUDE.md file exists
     let claudeFileValidation = await validateFileExists("CLAUDE.md");
     if (!claudeFileValidation) process.exit(0);
+
     let proj_data = await fetchConfiguration();
     let prompt;
     let httpArgs = {
@@ -47,144 +118,68 @@ async function generate_frontend_code(args) {
     if (response.data.error) {
       throw new Error(response.data.message);
     }
-    const resources = response.data?.resources || [];
-    const tasks = response.data?.tasks || [];
-    const hasImage = resources.some((r) => r.type === "screenshot");
-    const hasLayout = resources.some((r) => r.type === "layout_json");
-    const hasTasks = Array.isArray(tasks) && tasks.length > 0;
-    const hasHTML = resources.some((r) => r.type === "html");
-    const mockupDocumentId = response.data?.mockupDocumentId;
-    const resourceDirectory = `${args.directory}/${response.data?.name}`;
-    // --- Validation logic based on --from ---
-    if (args.from === "figma") {
-      if (!hasLayout || !hasImage) {
-        console.log(
-          chalk.red(
-            "❌ Error: For --from figma, both layout and screenshot are required."
-          )
-        );
-        process.exit(1);
-      }
-      if (!hasTasks) {
-        console.log(chalk.yellow("⚠️ Warning: No tasks found."));
-      }
+
+    const flags = getScreenResourceFlags(response);
+    const resourceTypes = validateFromType(args, flags, response);
+
+    // Only create directories after validation
+    const resourceDirectory = `${args.directory}/${flags.name}`;
+    const assetsDirectory = path.join(resourceDirectory, "assets");
+
+    let resourcePath = {};
+    let outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
+
+    if (args.from === "figma" || args.from === "html") {
       createDirectoryIfNotExists(resourceDirectory);
-      const assetsDirectory = path.join(resourceDirectory, "assets");
       createDirectoryIfNotExists(assetsDirectory);
-      const resourcePath = await saveResource(
+      resourcePath = await saveResource(
         response,
         resourceDirectory,
         assetsDirectory,
         proj_data,
-        ["screenshot", "layout_json", "icon", "font"]
+        resourceTypes
       );
-      const outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
       fs.writeFileSync(
         outputTaskPath,
-        JSON.stringify(response.data?.tasks, null, 2)
+        JSON.stringify(flags.tasks, null, 2)
       );
-      prompt = getPrompt("figma", {
-        screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
-        layoutJSONFilePath: JSON.stringify(resourcePath["layout_json"]),
-        taskFilePath: JSON.stringify([outputTaskPath]),
-        assetFolder: JSON.stringify(assetsDirectory),
-        // customInstruction: response.data?.metadata?.customInstruction || ""
-      });
-    } else if (args.from === "html") {
-      if (!hasHTML) {
-        console.log(
-          chalk.red("❌ Error: For --from html, HTML resource is required.")
-        );
-        process.exit(1);
+      if (args.from === "figma") {
+        prompt = getPrompt("figma", {
+          screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
+          layoutJSONFilePath: JSON.stringify(resourcePath["layout_json"]),
+          taskFilePath: JSON.stringify([outputTaskPath]),
+          assetFolder: JSON.stringify(assetsDirectory),
+        });
+      } else {
+        prompt = getPrompt("html", {
+          screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
+          htmlFilePath: JSON.stringify(resourcePath["html"]),
+          taskFilePath: JSON.stringify([outputTaskPath]),
+          assetFolder: JSON.stringify(assetsDirectory),
+        });
       }
-      if (!hasTasks) {
-        console.log(chalk.yellow("⚠️ Warning: No tasks found."));
-      }
-      createDirectoryIfNotExists(resourceDirectory);
-      const assetsDirectory = path.join(resourceDirectory, "assets");
-      createDirectoryIfNotExists(assetsDirectory);
-      const resourcePath = await saveResource(
-        response,
-        resourceDirectory,
-        assetsDirectory,
-        proj_data,
-        ["screenshot", "html", "icon", "font"]
-      );
-      const outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
-      fs.writeFileSync(
-        outputTaskPath,
-        JSON.stringify(response.data?.tasks, null, 2)
-      );
-      prompt = getPrompt("html", {
-        screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
-        htmlFilePath: JSON.stringify(resourcePath["html"]),
-        taskFilePath: JSON.stringify([outputTaskPath]),
-        assetFolder: JSON.stringify(assetsDirectory),
-        // customInstruction: response.data?.metadata?.customInstruction || ""
-      });
     } else if (args.from === "mockup") {
-      if (!mockupDocumentId) {
-        console.log(
-          chalk.red(
-            "❌ Error: For --from mockup, mockupDocumentId is required."
-          )
-        );
-        process.exit(1);
-      }
-       // Fetch mockup details
-      const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
-      const mockupResponse = await axios.get(mockupDocumentUrl, {
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": `${proj_data.api_key}`,
-        },
-      });
-      const mockupFileurl =
-        mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
-      const mockupHTML =
-        mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
-      const mockupName =
-        mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
-      const mockupHasScreenshot = !!mockupFileurl;
-      const mockupHasHTML = !!mockupHTML;
-      if (!mockupHasScreenshot || !mockupHasHTML) {
-        console.log(
-          chalk.red(
-            "❌ Error: For --from mockup, both screenshot and HTML are required in the mockup document."
-          )
-        );
-        process.exit(1);
-      }
-      if (!hasTasks) {
-        console.log(chalk.yellow("⚠️ Warning: No tasks found."));
-      }
-      // Save mockup screenshot and HTML
-      const screenShotPath = await saveMockupScreenShot(mockupFileurl, args.directory, proj_data);
-      const htmlFilePath = saveMockupHTML(mockupHTML, args.directory, mockupName);
+      const { screenShotPath, htmlFilePath } = await handleMockup(response, args, proj_data);
       createDirectoryIfNotExists(resourceDirectory);
-      const assetsDirectory = path.join(resourceDirectory, "assets");
       createDirectoryIfNotExists(assetsDirectory);
       await saveResource(
         response,
         resourceDirectory,
         assetsDirectory,
         proj_data,
-        ["icon", "font"]
+        resourceTypes
       );
-      const outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
       fs.writeFileSync(
         outputTaskPath,
-        JSON.stringify(response.data?.tasks, null, 2)
+        JSON.stringify(flags.tasks, null, 2)
       );
       prompt = getPrompt("mockup", {
         screenshotFilePath: JSON.stringify([screenShotPath]),
         htmlFilePath: JSON.stringify([htmlFilePath]),
         taskFilePath: JSON.stringify([outputTaskPath]),
         assetFolder: JSON.stringify(assetsDirectory),
-        // customInstruction: response.data?.metadata?.customInstruction || ""
       });
     }
-    // --- End validation logic ---
 
     // Ask user if they want to proceed
     const proceed = await confirm({
@@ -195,29 +190,42 @@ async function generate_frontend_code(args) {
       console.log(chalk.red("❌ Generate process exited by user."));
       process.exit(0);
     }
-    //import files if required
 
     console.log(chalk.greenBright(`${prompt}`));
-    let proceedWithClaudecode = await confirm({ message: "Do you want to continue to execute Claude code with above prompt?" })
+    let proceedWithClaudecode = await confirm({
+      message:
+        "Do you want to continue to execute Claude code with above prompt?",
+    });
     if (proceedWithClaudecode) {
-        spin = ora().start()
-        spin.color = "magenta"
-        spin.prefixText = "Processing"
-        spin.spinner = "simpleDots"
-        for await (const sdkmessage of query({
-            prompt: prompt,
-            abortController: new AbortController(),
-            options: {
-                allowedTools: ["Read", "Write", "Bash", "Edit", "LS", "TodoWrite", "TodoRead"]
-            },
-        })) {
-            if (sdkmessage.type == "assistant" && sdkmessage.message.content[0].type == "text") {
-                spin.stop()
-                console.log(chalk.cyan(sdkmessage.message.content[0].text));
-                spin.start()
-            }
+      spin = ora().start();
+      spin.color = "magenta";
+      spin.prefixText = "Processing";
+      spin.spinner = "simpleDots";
+      for await (const sdkmessage of query({
+        prompt: prompt,
+        abortController: new AbortController(),
+        options: {
+          allowedTools: [
+            "Read",
+            "Write",
+            "Bash",
+            "Edit",
+            "LS",
+            "TodoWrite",
+            "TodoRead",
+          ],
+        },
+      })) {
+        if (
+          sdkmessage.type == "assistant" &&
+          sdkmessage.message.content[0].type == "text"
+        ) {
+          spin.stop();
+          console.log(chalk.cyan(sdkmessage.message.content[0].text));
+          spin.start();
         }
-        spin.stop()
+      }
+      spin.stop();
     }
 
     process.exit(0);
@@ -240,7 +248,6 @@ async function createDirectoryIfNotExists(directory) {
 
 async function saveMockupScreenShot(fileUrl, resourceDirectory, proj_data) {
   const filekey = `${fileUrl.split("amazonaws.com")?.[1]?.replace(/^\/+/, "")}`;
-  console.log(chalk.blue(`🔗 File Key ${filekey}`));
   const signedUrlAPI = `${
     config.ISOMETRIC_API_URL
   }/documents/get-signed-url/${encodeURIComponent(filekey)}`;
@@ -274,4 +281,5 @@ generate
     /^(figma|html|mockup)$/i
   )
   .action(generate_frontend_code);
+
 export default generate;
