@@ -2,7 +2,7 @@
 
 python3 -m venv qa
 
-$ROOT_PATH/qa/bin/pip install --force-reinstall $ROOT_PATH/plugins/atdd-0.1.0-py3-none-any.whl
+$ROOT_PATH/qa/bin/pip install --force-reinstall $ROOT_PATH/plugins/playwright_codegen-0.1.0-py3-none-any1.whl
 
 export LLM_MODEL=gemini-2.0-flash-thinking-exp-1219
 export LLM_MODEL_PROVIDER=google_genai
