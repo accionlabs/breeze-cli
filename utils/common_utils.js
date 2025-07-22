@@ -67,28 +67,39 @@ export async function killChildProcess(child) {
         child.kill("SIGTERM");
     }
 }
-export async function saveResource(response, resourceDirectory, assetsDirectory, proj_data) {
-    for (let resource of response.data?.resources) {
+export async function saveResource(response, resourceDirectory, assetsDirectory, proj_data, resourceTypes) {
+    const resourcePaths = {};
+    for(let resourceType of resourceTypes) {
+        const resources = response.data?.resources?.filter(resource => resource?.type === resourceType);
+        for(let resource of resources) {
         const filekey = `${resource?.s3Url.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
         console.log(chalk.blue(`🔗 File Key ${filekey}`));
         const signedUrlAPI = `${config.ISOMETRIC_API_URL}/documents/get-signed-url/${encodeURIComponent(filekey)}`;
-        let args = {
-            url: signedUrlAPI,
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "api-key": `${proj_data.api_key}`
-            }
+            let args = {
+                url: signedUrlAPI,
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "api-key": `${proj_data.api_key}`
+                }
 
+            }
+            const signedUrlResponse = await httpRequests(args)
+            
+            let outDirectory = resourceDirectory
+            if (resource?.type === 'icon' || resource?.type === 'font') {
+                outDirectory = assetsDirectory
+            }
+            const outputPath = path.join(outDirectory, resource?.fileName);
+            await downloadFile(signedUrlResponse.data, outputPath);
+            // Collect paths by resource type
+            if (!resourcePaths[resource.type]) {
+                resourcePaths[resource.type] = [];
+            }
+            resourcePaths[resource.type].push(outputPath);
         }
-        const signedUrlResponse = await httpRequests(args)
-        let outDirectory = resourceDirectory
-        if (resource?.type === 'icon') {
-            outDirectory = assetsDirectory
-        }
-        const outputPath = path.join(outDirectory, resource?.fileName);
-        await downloadFile(signedUrlResponse.data, outputPath);
     }
+    return resourcePaths;
 }
 
 

@@ -7,6 +7,7 @@ import ora from 'ora';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config.js';
+import { getPrompt } from '../prompts/index.js';
 import {
   fetchConfiguration,
   httpRequests,
@@ -21,133 +22,206 @@ const generate = new Command('generate').description(
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+function getScreenResourceFlags(response) {
+  const resources = response.data?.resources || [];
+  return {
+    hasImage: resources.some((r) => r.type === 'screenshot'),
+    hasLayout: resources.some((r) => r.type === 'layout_json'),
+    hasHTML: resources.some((r) => r.type === 'html'),
+    hasTasks:
+      Array.isArray(response.data?.tasks) && response.data.tasks.length > 0,
+    mockupDocumentId: response.data?.mockupDocumentId,
+    resources,
+    tasks: response.data?.tasks || [],
+    name: response.data?.name,
+  };
+}
+
+function validateFromType(args, flags, response) {
+  if (args.from === 'figma') {
+    if (!flags.hasLayout || !flags.hasImage) {
+      console.log(
+        chalk.red(
+          '❌ Error: For --from figma, both layout and screenshot are required.'
+        )
+      );
+      process.exit(1);
+    }
+    if (!flags.hasTasks) {
+      console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
+    }
+    return ['screenshot', 'layout_json', 'icon', 'font'];
+  }
+  if (args.from === 'html') {
+    if (!flags.hasHTML) {
+      console.log(
+        chalk.red(
+          '❌ Error: code generation from HTML, HTML resource is required.'
+        )
+      );
+      process.exit(1);
+    }
+    if (!flags.hasTasks) {
+      console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
+    }
+    return ['screenshot', 'html', 'icon', 'font'];
+  }
+  if (args.from === 'mockup') {
+    if (!flags.mockupDocumentId) {
+      console.log(
+        chalk.red(
+          '❌ Error: For code generation from mockup, mockup is required. It can be generated in Breeze'
+        )
+      );
+      process.exit(1);
+    }
+    return ['icon', 'font'];
+  }
+  return [];
+}
+
+async function handleMockup(response, args, proj_data) {
+  const mockupDocumentId = response.data?.mockupDocumentId;
+  const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
+  const mockupResponse = await axios.get(mockupDocumentUrl, {
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': `${proj_data.api_key}`,
+    },
+  });
+  const mockupFileurl =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
+  const mockupHTML =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
+  const mockupName =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
+  const mockupHasScreenshot = !!mockupFileurl;
+  const mockupHasHTML = !!mockupHTML;
+  if (!mockupHasScreenshot || !mockupHasHTML) {
+    console.log(
+      chalk.red(
+        '❌ Error: For --from mockup, both screenshot and HTML are required in the mockup document.'
+      )
+    );
+    process.exit(1);
+  }
+  if (
+    !Array.isArray(response.data?.tasks) ||
+    response.data.tasks.length === 0
+  ) {
+    console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
+  }
+  const screenShotPath = await saveMockupScreenShot(
+    mockupFileurl,
+    args.directory,
+    proj_data
+  );
+  const htmlFilePath = saveMockupHTML(mockupHTML, args.directory, mockupName);
+  return { screenShotPath, htmlFilePath };
+}
+
 async function generate_frontend_code(args) {
   let spin;
   try {
-    //check claude.md file exists
+    // Check CLAUDE.md file exists
     let claudeFileValidation = await validateFileExists('CLAUDE.md');
     if (!claudeFileValidation) process.exit(0);
+
     let proj_data = await fetchConfiguration();
     let prompt;
-    if (args.screenId) {
-      let httpArgs = {
-        url: `${config.ISOMETRIC_API_URL}/semantic-model/get-screen`,
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': `${proj_data.api_key}`,
-        },
-        params: {
-          projectuuid: `${proj_data.project_key}`,
-          websiteId: `${args.websiteId}`,
-          screenId: `${args.screenId}`,
-        },
-      };
-      const response = await httpRequests(httpArgs);
-      if (response.data.error) {
-        throw new Error(response.data.message);
-      }
-      const resources = response.data?.resources || [];
-      const tasks = response.data?.tasks || [];
-      const hasImage = resources.some((r) => r.type === 'screenshot');
-      const hasLayout = resources.some((r) => r.type === 'layout_json');
-      const hasAssets = resources.some(
-        (r) => r.type === 'icon' || r.type === 'asset'
+    let httpArgs = {
+      url: `${config.ISOMETRIC_API_URL}/semantic-model/get-screen`,
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': `${proj_data.api_key}`,
+      },
+      params: {
+        projectuuid: `${proj_data.project_key}`,
+        websiteId: `${args.websiteId}`,
+        screenId: `${args.screenId}`,
+      },
+    };
+    let response;
+    try {
+      response = await httpRequests(httpArgs);
+    } catch (error) {
+      console.log(chalk.red('❌ Error while fetching screen data ::: '));
+      throw error;
+    }
+
+    if (response.data.error) {
+      throw new Error(response.data.message);
+    }
+
+    const flags = getScreenResourceFlags(response);
+    const resourceTypes = validateFromType(args, flags, response);
+
+    // Only create directories after validation
+    const resourceDirectory = `${args.directory}/${flags.name}`;
+    const assetsDirectory = path.join(resourceDirectory, 'assets');
+
+    let resourcePath = {};
+    let outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
+
+    if (args.from === 'figma' || args.from === 'html') {
+      createDirectoryIfNotExists(resourceDirectory);
+      createDirectoryIfNotExists(assetsDirectory);
+      resourcePath = await saveResource(
+        response,
+        resourceDirectory,
+        assetsDirectory,
+        proj_data,
+        resourceTypes
       );
-      const hasTasks = Array.isArray(tasks) && tasks.length > 0;
-
-      if (!hasImage && !hasTasks && !hasLayout) {
-        console.log(
-          chalk.red('❌ Error: Screen does not have any resources or tasks.')
-        );
-        process.exit(1);
-      }
-
-      if (hasImage) {
-        console.log(chalk.green('✅ Screen Screenshot found.'));
+      fs.writeFileSync(outputTaskPath, JSON.stringify(flags.tasks, null, 2));
+      if (args.from === 'figma') {
+        prompt = getPrompt('figma', {
+          screenshotFilePath: JSON.stringify(resourcePath['screenshot']),
+          layoutJSONFilePath: JSON.stringify(resourcePath['layout_json']),
+          taskFilePath: JSON.stringify([outputTaskPath]),
+          assetFolder: JSON.stringify(assetsDirectory),
+        });
       } else {
-        console.log(chalk.yellow('⚠️ Warning: No screenshot found.'));
+        prompt = getPrompt('html', {
+          screenshotFilePath: JSON.stringify(resourcePath['screenshot']),
+          htmlFilePath: JSON.stringify(resourcePath['html']),
+          taskFilePath: JSON.stringify([outputTaskPath]),
+          assetFolder: JSON.stringify(assetsDirectory),
+        });
       }
-
-      if (hasLayout) {
-        console.log(chalk.green('✅ Screen Layout json found.'));
-      } else {
-        console.log(chalk.yellow('⚠️ Warning: No layout json found.'));
-      }
-
-      if (hasAssets) {
-        console.log(chalk.green('✅ Screen Assets found.'));
-      } else {
-        console.log(chalk.yellow('⚠️ Warning: No assets found.'));
-      }
-
-      if (hasTasks) {
-        console.log(chalk.green('✅ Screen Tasks found.'));
-      } else {
-        console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
-      }
-      // --- Validation logic end ---
-
-      // Ask user if they want to proceed
-      const proceed = await confirm({
-        message:
-          'Do you want to proceed? Note: It will generate better result if you provide screenshot, layout json and tasks',
-      });
-      if (!proceed) {
-        console.log(chalk.red('❌ Import process exited by user.'));
-        process.exit(0);
-      }
-
-      const resourceDirectory = `${args.directory}/${response.data?.name}`;
-      if (!fs.existsSync(resourceDirectory)) {
-        fs.mkdirSync(resourceDirectory, { recursive: true });
-      }
-      const assetsDirectory = path.join(resourceDirectory, 'assets');
-      if (!fs.existsSync(assetsDirectory)) {
-        fs.mkdirSync(assetsDirectory, { recursive: true });
-      }
-
-      // saving resources and assets in directory
+    } else if (args.from === 'mockup') {
+      const { screenShotPath, htmlFilePath } = await handleMockup(
+        response,
+        args,
+        proj_data
+      );
+      createDirectoryIfNotExists(resourceDirectory);
+      createDirectoryIfNotExists(assetsDirectory);
       await saveResource(
         response,
         resourceDirectory,
         assetsDirectory,
-        proj_data
+        proj_data,
+        resourceTypes
       );
-
-      // saving tasks in the directory
-      const outputTaskPath = path.join(resourceDirectory, `tasks.text`);
-      fs.writeFileSync(
-        outputTaskPath,
-        JSON.stringify(response.data?.tasks, null, 2)
-      );
-      prompt = `Generate a ${response.data?.type} screen named "${response.data?.name}" using layouts (JSON) and screenshots (images) from "${resourceDirectory}", and assets from "${assetsDirectory}". The screen should accomplish the tasks defined in "${outputTaskPath}".`;
-      if (response.data?.metadata?.route) {
-        prompt += ` Use the route "${response.data.metadata.route}".`;
-      }
-    }
-    //import files if required
-    else if (args.directory) {
-      let files = fs.readdirSync(path.join(args.directory), {
-        recursive: true,
+      fs.writeFileSync(outputTaskPath, JSON.stringify(flags.tasks, null, 2));
+      prompt = getPrompt('mockup', {
+        screenshotFilePath: JSON.stringify([screenShotPath]),
+        htmlFilePath: JSON.stringify([htmlFilePath]),
+        taskFilePath: JSON.stringify([outputTaskPath]),
+        assetFolder: JSON.stringify(assetsDirectory),
       });
-      let jsonFiles = files.filter(
-        (file) => path.extname(file).toLowerCase() === '.json'
-      );
-      if (jsonFiles.length == 0) {
-        console.log(chalk.yellowBright('⚠️ No Json files are found.'));
-        let confirmContinue = await confirm({
-          message: 'Do you want to continue?',
-        });
-        if (!confirmContinue) {
-          console.log(chalk.red('Frontend code generation process exited'));
-          process.exit(0);
-        }
-      }
-      let directoryPathPrompt = args.directory
-        ? `Use any image files from provided ${args.directory} folder as overall layout and styling references. Use any JSON files (e.g., 'header.json', 'main.json') as structured Figma exports to guide the generation of individual UI components.`
-        : '';
-      prompt = `${args.requirement}. ${directoryPathPrompt}`;
+    }
+
+    // Ask user if they want to proceed
+    const proceed = await confirm({
+      message:
+        'Do you want to proceed? Note: It will generate better result if you provide screenshot, layout json and tasks',
+    });
+    if (!proceed) {
+      console.log(chalk.red('❌ Generate process exited by user.'));
+      process.exit(0);
     }
 
     console.log(chalk.greenBright(`${prompt}`));
@@ -187,7 +261,7 @@ async function generate_frontend_code(args) {
       spin.stop();
     }
 
-    //process.exit(0);
+    process.exit(0);
   } catch (error) {
     if (spin) spin.stop();
     console.log(error);
@@ -199,13 +273,46 @@ async function generate_frontend_code(args) {
   }
 }
 
+async function createDirectoryIfNotExists(directory) {
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+}
+
+async function saveMockupScreenShot(fileUrl, resourceDirectory, proj_data) {
+  const filekey = `${fileUrl.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`;
+  const signedUrlAPI = `${
+    config.ISOMETRIC_API_URL
+  }/documents/get-signed-url/${encodeURIComponent(filekey)}`;
+  const signedUrlResponse = await axios.get(signedUrlAPI, {
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': `${proj_data.api_key}`,
+    },
+  });
+  const outputPath = path.join(resourceDirectory, filekey.split('/').pop());
+  await downloadFile(signedUrlResponse.data, outputPath);
+  return outputPath;
+}
+
+async function saveMockupHTML(html, resourceDirectory, name) {
+  const outputPath = path.join(resourceDirectory, `${name}.html`);
+  fs.writeFileSync(outputPath, html);
+  return outputPath;
+}
+
 generate
   .command('frontend')
   .description('Generate frontend code')
-  .option('--requirement <string>', 'user requirement')
+  // .option("--requirement <string>", "user requirement")
   .option('--directory <string>', 'Absolute path for claude to load files')
   .option('--screenId <string>', 'Screen Id')
   .option('--websiteId <string>', 'Website Id')
+  .option(
+    '--from <string>',
+    'Source type: figma | html | mockup',
+    /^(figma|html|mockup)$/i
+  )
   .action(generate_frontend_code);
 
 generate
