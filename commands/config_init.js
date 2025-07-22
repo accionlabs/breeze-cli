@@ -58,7 +58,7 @@ export default async function init() {
         }
 
         if (!fs.existsSync(path.join(homedir(), ".breeze"))) {
-            fs.mkdirSync('./.breeze')
+            fs.mkdirSync(path.join(homedir(), ".breeze"))
         }
         fs.writeFileSync(path.join(homedir(), ".breeze/.config"), JSON.stringify({
             api_key,
