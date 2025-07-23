@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { confirm } from "@inquirer/prompts";
+import { confirm, input } from "@inquirer/prompts";
 import * as fs from "fs";
 import path, { dirname } from "path";
 import { query } from "@anthropic-ai/claude-code";
@@ -105,7 +105,6 @@ async function generate_frontend_code(args) {
     if (!claudeFileValidation) process.exit(0);
 
     let proj_data = await fetchConfiguration();
-    let prompt;
     let httpArgs = {
       url: `${config.ISOMETRIC_API_URL}/semantic-model/get-screen`,
       method: "GET",
@@ -140,6 +139,7 @@ async function generate_frontend_code(args) {
 
     let resourcePath = {};
     let outputTaskPath = path.join(resourceDirectory, `tasks.txt`);
+    let placeholders;
 
     if (args.from === "figma" || args.from === "html") {
       createDirectoryIfNotExists(resourceDirectory);
@@ -156,19 +156,20 @@ async function generate_frontend_code(args) {
         JSON.stringify(flags.tasks, null, 2)
       );
       if (args.from === "figma") {
-        prompt = getPrompt("figma", {
+        placeholders = {
           screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
           layoutJSONFilePath: JSON.stringify(resourcePath["layout_json"]),
           taskFilePath: JSON.stringify([outputTaskPath]),
           assetFolder: JSON.stringify(assetsDirectory),
-        });
+        }
+        
       } else {
-        prompt = getPrompt("html", {
+        placeholders = {
           screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
           htmlFilePath: JSON.stringify(resourcePath["html"]),
           taskFilePath: JSON.stringify([outputTaskPath]),
           assetFolder: JSON.stringify(assetsDirectory),
-        });
+        }
       }
     } else if (args.from === "mockup") {
       const { screenShotPath, htmlFilePath } = await handleMockup(response, args, proj_data);
@@ -185,25 +186,31 @@ async function generate_frontend_code(args) {
         outputTaskPath,
         JSON.stringify(flags.tasks, null, 2)
       );
-      prompt = getPrompt("mockup", {
+      placeholders = {
         screenshotFilePath: JSON.stringify([screenShotPath]),
         htmlFilePath: JSON.stringify([htmlFilePath]),
         taskFilePath: JSON.stringify([outputTaskPath]),
         assetFolder: JSON.stringify(assetsDirectory),
-      });
+      }
     }
+
+    const customUserInput = await input({
+        message: "Provide any additional instructions or context for code generation (optional):",
+    });
+
+    const prompt = getPrompt("figma", { ...placeholders, customInstruction: customUserInput });
 
     // Ask user if they want to proceed
     const proceed = await confirm({
       message:
-        "Do you want to proceed? Note: It will generate better result if you provide screenshot, layout json and tasks",
+        "Do you want to proceed? Note: It will generate better result if you provide all the required files and tasks.",
     });
     if (!proceed) {
       console.log(chalk.red("❌ Generate process exited by user."));
       process.exit(0);
     }
 
-    console.log(marked(`${prompt}`));
+    console.log(chalk.greenBright(`${prompt}`));
     let proceedWithClaudecode = await confirm({
       message:
         "Do you want to continue to execute Claude code with above prompt?",
