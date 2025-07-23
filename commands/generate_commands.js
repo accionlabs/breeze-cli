@@ -6,6 +6,11 @@ import path, { dirname } from "path";
 import { query } from "@anthropic-ai/claude-code";
 import { fileURLToPath } from "url";
 import ora from "ora";
+import { marked } from "marked"; // <-- add this
+import TerminalRenderer from "marked-terminal";
+marked.setOptions({
+  renderer: new TerminalRenderer(),
+});
 import {
   fetchConfiguration,
   httpRequests,
@@ -198,7 +203,7 @@ async function generate_frontend_code(args) {
       process.exit(0);
     }
 
-    console.log(chalk.greenBright(`${prompt}`));
+    console.log(marked(`${prompt}`));
     let proceedWithClaudecode = await confirm({
       message:
         "Do you want to continue to execute Claude code with above prompt?",
@@ -228,7 +233,7 @@ async function generate_frontend_code(args) {
           sdkmessage.message.content[0].type == "text"
         ) {
           spin.stop();
-          console.log(chalk.cyan(sdkmessage.message.content[0].text));
+          console.log(marked(sdkmessage.message.content[0].text));
           spin.start();
         }
       }
