@@ -209,15 +209,7 @@ async function generate_frontend_code(args) {
       console.log(chalk.red("❌ Generate process exited by user."));
       process.exit(0);
     }
-
-    console.log(chalk.greenBright(`${prompt}`));
-    let proceedWithClaudecode = await confirm({
-      message:
-        "Do you want to continue to execute Claude code with above prompt?",
-    });
-    if (proceedWithClaudecode) {
-        await runCluade(prompt)
-    }
+    await runCluade(prompt)
     while(1) {
         const customUserInput = await input({
             message: "Provide Input!",
