@@ -216,7 +216,33 @@ async function generate_frontend_code(args) {
         "Do you want to continue to execute Claude code with above prompt?",
     });
     if (proceedWithClaudecode) {
-      spin = ora().start();
+        await runCluade(prompt)
+    }
+    while(1) {
+        const customUserInput = await input({
+            message: "Provide Input!",
+        });
+        if(customUserInput) {
+            await runCluade(customUserInput, true)
+        }
+    }
+    
+  } catch (error) {
+    if (spin) spin.stop();
+    console.log(error);
+    let message = error?.response?.data?.error
+      ? error?.response?.data?.message
+      : error.message;
+    console.log(chalk.red("❌ Error ::: ", message));
+    process.exit(0);
+  }
+}
+
+
+async function runCluade(prompt, continueClaude = false) {
+    let spin;
+    try {
+        spin = ora().start();
       spin.color = "magenta";
       spin.prefixText = "Processing";
       spin.spinner = "simpleDots";
@@ -224,6 +250,7 @@ async function generate_frontend_code(args) {
         prompt: prompt,
         abortController: new AbortController(),
         options: {
+          continue: continueClaude,
           allowedTools: [
             "Read",
             "Write",
@@ -236,8 +263,7 @@ async function generate_frontend_code(args) {
         },
       })) {
         if (
-          sdkmessage.type == "assistant" &&
-          sdkmessage.message.content[0].type == "text"
+          sdkmessage?.message?.content?.[0]?.type == "text"
         ) {
           spin.stop();
           console.log(marked(sdkmessage.message.content[0].text));
@@ -245,18 +271,16 @@ async function generate_frontend_code(args) {
         }
       }
       spin.stop();
-    }
-
-    process.exit(0);
-  } catch (error) {
-    if (spin) spin.stop();
+    } catch (error) {
+        if (spin) spin.stop();
     console.log(error);
     let message = error?.response?.data?.error
       ? error?.response?.data?.message
       : error.message;
     console.log(chalk.red("❌ Error ::: ", message));
     process.exit(0);
-  }
+    }
+    
 }
 
 async function createDirectoryIfNotExists(directory) {
