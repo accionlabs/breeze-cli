@@ -19,6 +19,7 @@ import {
 } from "../utils/common_utils.js";
 import config from "../config.js";
 import { getPrompt } from "../prompts/index.js";
+import generate_documentation from './generate_documentation.js';
 
 const generate = new Command("generate").description(
   "generate frontend and backend project code"
@@ -316,5 +317,11 @@ generate
     /^(figma|html|mockup)$/i
   )
   .action(generate_frontend_code);
+
+generate
+  .command('document')
+  .description('Generate documentation')
+  .option('-o, --output <path>', 'Output file path')
+  .action(generate_documentation);
 
 export default generate;
