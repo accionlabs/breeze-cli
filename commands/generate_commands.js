@@ -33,6 +33,7 @@ function getScreenResourceFlags(response) {
     hasImage: resources.some((r) => r.type === "screenshot"),
     hasLayout: resources.some((r) => r.type === "layout_json"),
     hasHTML: resources.some((r) => r.type === "html"),
+    hasCSS: resources.some((r) => r.type === "css"),
     hasTasks: Array.isArray(response.data?.tasks) && response.data.tasks.length > 0,
     mockupDocumentId: response.data?.mockupDocumentId,
     resources,
@@ -60,7 +61,7 @@ function validateFromType(args, flags, response) {
     if (!flags.hasTasks) {
       console.log(chalk.yellow("⚠️ Warning: No tasks found."));
     }
-    return ["screenshot", "html", "icon", "font"];
+    return ["screenshot", "html", "icon", "font", "css"];
   }
   if (args.from === "mockup") {
     if (!flags.mockupDocumentId) {
@@ -119,14 +120,14 @@ async function generate_frontend_code(args) {
         screenId: `${args.screenId}`,
       },
     };
-    let response 
+    let response
     try {
-       response = await httpRequests(httpArgs);
+      response = await httpRequests(httpArgs);
     } catch (error) {
-        console.log(chalk.red('❌ Error while fetching screen data ::: '));
-        throw error;
+      console.log(chalk.red('❌ Error while fetching screen data ::: '));
+      throw error;
     }
-    
+
     if (response.data.error) {
       throw new Error(response.data.message);
     }
@@ -163,7 +164,7 @@ async function generate_frontend_code(args) {
           taskFilePath: JSON.stringify([outputTaskPath]),
           assetFolder: JSON.stringify(assetsDirectory),
         }
-        
+
       } else {
         placeholders = {
           screenshotFilePath: JSON.stringify(resourcePath["screenshot"]),
@@ -196,7 +197,7 @@ async function generate_frontend_code(args) {
     }
 
     const customUserInput = await input({
-        message: "Provide any additional instructions or context for code generation (optional):",
+      message: "Provide any additional instructions or context for code generation (optional):",
     });
 
     const prompt = getPrompt("figma", { ...placeholders, customInstruction: customUserInput });
@@ -210,45 +211,16 @@ async function generate_frontend_code(args) {
       console.log(chalk.red("❌ Generate process exited by user."));
       process.exit(0);
     }
-
-    console.log(chalk.greenBright(`${prompt}`));
-    let proceedWithClaudecode = await confirm({
-      message:
-        "Do you want to continue to execute Claude code with above prompt?",
-    });
-    if (proceedWithClaudecode) {
-      spin = ora().start();
-      spin.color = "magenta";
-      spin.prefixText = "Processing";
-      spin.spinner = "simpleDots";
-      for await (const sdkmessage of query({
-        prompt: prompt,
-        abortController: new AbortController(),
-        options: {
-          allowedTools: [
-            "Read",
-            "Write",
-            "Bash",
-            "Edit",
-            "LS",
-            "TodoWrite",
-            "TodoRead",
-          ],
-        },
-      })) {
-        if (
-          sdkmessage.type == "assistant" &&
-          sdkmessage.message.content[0].type == "text"
-        ) {
-          spin.stop();
-          console.log(marked(sdkmessage.message.content[0].text));
-          spin.start();
-        }
+    await runCluade(prompt)
+    while (1) {
+      const customUserInput = await input({
+        message: "Provide Input!",
+      });
+      if (customUserInput) {
+        await runCluade(customUserInput, true)
       }
-      spin.stop();
     }
 
-    process.exit(0);
   } catch (error) {
     if (spin) spin.stop();
     console.log(error);
@@ -260,6 +232,51 @@ async function generate_frontend_code(args) {
   }
 }
 
+
+async function runCluade(prompt, continueClaude = false) {
+  let spin;
+  try {
+    spin = ora().start();
+    spin.color = "magenta";
+    spin.prefixText = "Processing";
+    spin.spinner = "simpleDots";
+    for await (const sdkmessage of query({
+      prompt: prompt,
+      abortController: new AbortController(),
+      options: {
+        continue: continueClaude,
+        allowedTools: [
+          "Read",
+          "Write",
+          "Bash",
+          "Edit",
+          "LS",
+          "TodoWrite",
+          "TodoRead",
+        ],
+      },
+    })) {
+      if (
+        sdkmessage?.message?.content?.[0]?.type == "text"
+      ) {
+        spin.stop();
+        console.log(marked(sdkmessage.message.content[0].text));
+        spin.start();
+      }
+    }
+    spin.stop();
+  } catch (error) {
+    if (spin) spin.stop();
+    console.log(error);
+    let message = error?.response?.data?.error
+      ? error?.response?.data?.message
+      : error.message;
+    console.log(chalk.red("❌ Error ::: ", message));
+    process.exit(0);
+  }
+
+}
+
 async function createDirectoryIfNotExists(directory) {
   if (!fs.existsSync(directory)) {
     fs.mkdirSync(directory, { recursive: true });
@@ -268,9 +285,8 @@ async function createDirectoryIfNotExists(directory) {
 
 async function saveMockupScreenShot(fileUrl, resourceDirectory, proj_data) {
   const filekey = `${fileUrl.split("amazonaws.com")?.[1]?.replace(/^\/+/, "")}`;
-  const signedUrlAPI = `${
-    config.ISOMETRIC_API_URL
-  }/documents/get-signed-url/${encodeURIComponent(filekey)}`;
+  const signedUrlAPI = `${config.ISOMETRIC_API_URL
+    }/documents/get-signed-url/${encodeURIComponent(filekey)}`;
   const signedUrlResponse = await axios.get(signedUrlAPI, {
     headers: {
       "Content-Type": "application/json",
