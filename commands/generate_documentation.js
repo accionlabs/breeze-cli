@@ -45,7 +45,10 @@ async function generate_documentation(args) {
   const fileName = args.output || 'output.md';
   const outputPath = path.join(breezeDir, fileName);
 
+
   try {
+  //=//for testing commenting line to push content in doc collection
+
     const proceed = await confirm({
       message: 'Do you want to continue to execute Claude code with the loaded prompt?',
     });
@@ -79,6 +82,7 @@ async function generate_documentation(args) {
     await fs.writeFile(outputPath, outputText, 'utf-8');
     console.log(chalk.green(`\n✅ Documentation saved to ${outputPath}`));
 
+    //---//
     // Fetch project config
     const proj_data = await fetchConfiguration();
     console.log(chalk.yellow('\nℹ️  Project configuration:'), proj_data);
@@ -92,15 +96,42 @@ async function generate_documentation(args) {
       throw err;
     }
 
-    //- hardocded file metadata
+    // Get git repository information
+
+    let repoUrl = '';
+    let repoName = '';
+
+    try {
+      // Dynamically import child_process for ES module compatibility
+      const { execSync } = await import('child_process');
+      // Get git remote URL
+      repoUrl = execSync('git config --get remote.origin.url', { 
+        encoding: 'utf8',
+        cwd: process.cwd()
+      }).trim();
+
+      // Get repository name from the current directory
+      repoName = path.basename(process.cwd());
+
+      console.log(chalk.cyan(`\n📦 Repository URL: ${repoUrl}`));
+
+    } catch (err) {
+      console.warn(chalk.yellow('⚠️  Not a git repository or git not installed'));
+      repoUrl = '';
+      repoName = path.basename(process.cwd());
+    }
+
+    
     const fileMetaData = {
-      name: "CurrencyConvertorApp",
+      name: repoName || "project_documentation",
       type: 'git',
-      mimeType: "text"
+      mimeType: 'application/text',
+      git_url: repoUrl || proj_data.repository_url || '',
     };
 
     const requestBody = {
-      uuid: proj_data.project_key || "d1c28f53-b591-4cf5-b908-afa6ed71fa81",
+      // uuid: proj_data.project_key || "d1c28f53-b591-4cf5-b908-afa6ed71fa81",
+      uuid: "175584c4-e3b4-4bff-a475-0e3791ed1779",
       content,
       fileMetaData,
     };
