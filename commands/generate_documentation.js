@@ -1,20 +1,19 @@
 import { query } from '@anthropic-ai/claude-code';
-import { confirm, input } from '@inquirer/prompts';
+import { confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import ora from 'ora';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 import axios from 'axios';
-import {
-  fetchConfiguration,
-} from "../utils/common_utils.js";
+import { fetchConfiguration } from "../utils/common_utils.js";
+import { log } from '@clack/prompts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = path.resolve(__dirname, '..'); // root of repo
+const projectRoot = path.resolve(__dirname, '..');
 
-// Load Claude prompt from file
 async function loadPromptMarkdown() {
   const promptPath = path.join(projectRoot, 'claude_documentation.md');
   try {
@@ -29,14 +28,26 @@ async function generate_documentation(args) {
   let spin;
   const outputChunks = [];
   const rawPrompt = await loadPromptMarkdown();
+  log.info(chalk.cyan('📄 Generating documentation using Claude AI...'));
 
-  const breezeDir = path.join(projectRoot, '.breeze');
+  // Initialize breezeDir in home directory
+  const breezeDir = path.join(homedir(), '.breeze');
+  console.log(chalk.cyan(`Using .breeze directory at: ${breezeDir}`));
+  
+  // Ensure .breeze directory exists in home directory
+  try {
+    await fs.mkdir(breezeDir, { recursive: true });
+  } catch (err) {
+    console.error(chalk.red(`❌ Failed to create .breeze directory: ${err.message}`));
+    process.exit(1);
+  }
+
   const fileName = args.output || 'output.md';
   const outputPath = path.join(breezeDir, fileName);
 
+
   try {
-    // Ensure .breeze directory exists
-    await fs.mkdir(breezeDir, { recursive: true });
+   //= for testing commenting line to push content in doc collection//
 
     const proceed = await confirm({
       message: 'Do you want to continue to execute Claude code with the loaded prompt?',
@@ -68,46 +79,71 @@ async function generate_documentation(args) {
     spin.stop();
 
     const outputText = outputChunks.join('\n');
-
     await fs.writeFile(outputPath, outputText, 'utf-8');
     console.log(chalk.green(`\n✅ Documentation saved to ${outputPath}`));
 
+    //---//
+    
     // Fetch project config
     const proj_data = await fetchConfiguration();
-
     console.log(chalk.yellow('\nℹ️  Project configuration:'), proj_data);
 
-    // Call API to save in document collection
-    // const apiUrl = 'https://your.api.endpoint/documents'; // Replace with your real endpoint
-    // const response = await axios.post(apiUrl, {
-    //   content: outputText,
-    //   project: proj_data,
-    // });
-
-    // console.log(chalk.green(`✅ Uploaded to document collection. ID: ${response.data?.id || 'N/A'}`));
-
-
-     // Read content from .breeze/output.md
-    const breezeDir = path.join(projectRoot, '.breeze');
-    const outputPath = path.join(breezeDir, 'output.md');
+    // Read content from generated documentation
     let content = '';
-    console.log('Reading from:', outputPath);
     try {
       content = await fs.readFile(outputPath, 'utf-8');
-      console.log(content);
-      const requestBody = {
-        uuid: proj_data.project_key,
-        content,
+    } catch (err) {
+      console.error(chalk.red(`❌ Could not read documentation file at ${outputPath}`));
+      throw err;
+    }
+
+    // Get git repository information
+
+    let repoUrl = '';
+    let repoName = '';
+
+    try {
+      // Dynamically import child_process for ES module compatibility
+      const { execSync } = await import('child_process');
+      // Get git remote URL
+      repoUrl = execSync('git config --get remote.origin.url', { 
+        encoding: 'utf8',
+        cwd: process.cwd()
+      }).trim();
+
+      // Get repository name from the current directory
+      repoName = path.basename(process.cwd());
+
+      console.log(chalk.cyan(`\n📦 Repository URL: ${repoUrl}`));
+
+    } catch (err) {
+      console.warn(chalk.yellow('⚠️  Not a git repository or git not installed'));
+      repoUrl = '';
+      repoName = path.basename(process.cwd());
+    }
+
+    
+    const fileMetaData = {
+      name: repoName || "project_documentation",
+      type: 'git',
+      mimeType: 'application/text',
+      git_url: repoUrl || proj_data.repository_url || '',
     };
-    //  Call API to save in document collection
+
+    const requestBody = {
+      uuid: proj_data.project_key,
+      content,
+      fileMetaData,
+    };
+
+    console.log(chalk.cyan('📤 Uploading documentation to the document collection...', requestBody));
+    
     const apiUrl = 'https://n8n.accionbreeze.com/webhook/document/store';
     const response = await axios.post(apiUrl, requestBody);
-    console.log("reee", JSON.stringify(response.data, null, 2));
-    
-    console.log(chalk.green(`✅ Uploaded to document collection. ID: ${JSON.stringify(response.data, null, 2)}`));
-    } catch (err) {
-      console.error('Error reading file:', err.message);
-    }
+
+    // const response = await axios.post(apiUrl, requestBody, { headers });
+
+    console.log(chalk.green(`✅ Uploaded to document collection. Response:`, JSON.stringify(response.data, null, 2)));
 
   } catch (error) {
     if (spin) spin.stop();
