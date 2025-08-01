@@ -47,7 +47,7 @@ async function generate_documentation(args) {
 
 
   try {
-  //=//for testing commenting line to push content in doc collection
+   //= for testing commenting line to push content in doc collection//
 
     const proceed = await confirm({
       message: 'Do you want to continue to execute Claude code with the loaded prompt?',
@@ -83,6 +83,7 @@ async function generate_documentation(args) {
     console.log(chalk.green(`\n✅ Documentation saved to ${outputPath}`));
 
     //---//
+    
     // Fetch project config
     const proj_data = await fetchConfiguration();
     console.log(chalk.yellow('\nℹ️  Project configuration:'), proj_data);
@@ -130,8 +131,7 @@ async function generate_documentation(args) {
     };
 
     const requestBody = {
-      // uuid: proj_data.project_key || "d1c28f53-b591-4cf5-b908-afa6ed71fa81",
-      uuid: "175584c4-e3b4-4bff-a475-0e3791ed1779",
+      uuid: proj_data.project_key,
       content,
       fileMetaData,
     };
