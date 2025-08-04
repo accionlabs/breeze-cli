@@ -322,6 +322,7 @@ generate
   .command('document')
   .description('Generate documentation')
   .option('-o, --output <path>', 'Output file path')
+  .option('--git-url <url>', 'Git repository URL to clone into temp folder')
   .action(generate_documentation);
 
 export default generate;
