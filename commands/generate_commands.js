@@ -22,6 +22,8 @@ import config from "../config.js";
 import { getPrompt } from "../prompts/index.js";
 import generate_documentation from './generate_documentation.js';
 import axios from "axios";
+import generate_website_code from './generate_website.js';
+
 
 const generate = new Command("generate").description(
   "generate frontend and backend project code"
@@ -452,5 +454,12 @@ generate
   .option('-o, --output <path>', 'Output file path')
   .option('--git-url <url>', 'Git repository URL to clone into temp folder')
   .action(generate_documentation);
+
+generate
+  .command("website")
+  .description("Generate website code from API (websiteId) or from directory resources")
+  .option("--directory <string>", "Absolute path for claude to load files. If only directory is provided (no websiteId), will read existing resources from directory")
+  .option("--websiteId <string>", "Website Id (optional if using directory-only mode)")
+  .action(generate_website_code);
 
 export default generate;
