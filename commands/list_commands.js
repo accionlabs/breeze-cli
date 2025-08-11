@@ -3,7 +3,7 @@ import axios from 'axios';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import * as fs from 'fs';
-import { fetchConfiguration, fetchProjectDetails, validateConfiguration } from '../utils/common_utils';
+import { fetchConfiguration, fetchProjectDetails, validateConfiguration } from '../utils/common_utils.js';
 const list = new Command('list').description('List tasks,scenarios and personas');
 async function personas() {
     try {
