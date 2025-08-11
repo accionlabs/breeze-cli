@@ -28,7 +28,7 @@ export async function validateConfiguration() {
 
 export async function fetchConfiguration() {
     let project_config_details = fs.readFileSync(path.join(homedir(), '.breeze/.config'));
-    let proj_data = JSON.parse(project_config_details);
+    let proj_data = JSON.parse(project_config_details.toString());
     return proj_data;
 }
 

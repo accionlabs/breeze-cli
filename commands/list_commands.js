@@ -1,8 +1,6 @@
 import ora from 'ora';
-import axios from 'axios';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import * as fs from 'fs';
 import { fetchConfiguration, fetchProjectDetails, validateConfiguration } from '../utils/common_utils.js';
 const list = new Command('list').description('List tasks,scenarios and personas');
 async function personas() {
@@ -11,8 +9,7 @@ async function personas() {
         spin.color = "magenta"
         spin.spinner = "circleHalves"
         await validateConfiguration();
-        let project_config_details = await fetchConfiguration()
-        let proj_data = JSON.parse(project_config_details);
+        let proj_data = await fetchConfiguration()
         const fetchProjectData = await fetchProjectDetails(proj_data)
         spin.stop();
         if (fetchProjectData.status == 200 && !fetchProjectData.data.error) {
@@ -32,12 +29,11 @@ async function personas() {
 }
 async function personas_tasks(task) {
     try {
-        const spin = ora("Please wait for the tasks to be listed here");
+        const spin = ora("Please wait for the tasks to be listed here").start();
         spin.color = "magenta"
         spin.spinner = "circleHalves"
         await validateConfiguration()
-        let project_config_details = await fetchConfiguration();
-        let proj_data = JSON.parse(project_config_details);
+        let proj_data = await fetchConfiguration();
         const fetchProjectData = await fetchProjectDetails(proj_data)
         spin.stop();
         if (fetchProjectData.status == 200) {
@@ -50,6 +46,7 @@ async function personas_tasks(task) {
             }
         }
     } catch (error) {
+        console.log(error)
         console.log(chalk.red('❌ Error ::: ', error.message));
         process.exit(0);
     }
@@ -58,12 +55,11 @@ async function personas_tasks(task) {
 
 async function task_scenarios(task) {
     try {
-        const spin = ora("Please wait for the scenarios to be listed here");
+        const spin = ora("Please wait for the scenarios to be listed here").start();
         spin.color = "magenta"
         spin.spinner = "circleHalves"
         await validateConfiguration()
-        let project_config_details = await fetchConfiguration();
-        let proj_data = JSON.parse(project_config_details);
+        let proj_data = await fetchConfiguration();
         const fetchProjectData = await fetchProjectDetails(proj_data)
         spin.stop();
         if (fetchProjectData.status == 200) {
