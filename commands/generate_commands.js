@@ -25,8 +25,8 @@ import axios from "axios";
 import generate_website_code from './generate_website.js';
 
 
-const generate = new Command("generate").description(
-  "generate frontend and backend project code"
+const generate = new Command('generate').description(
+  'generate frontend and backend project code'
 );
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,32 +47,44 @@ function getScreenResourceFlags(response) {
 }
 
 function validateFromType(args, flags, response) {
-  if (args.from === "figma") {
+  if (args.from === 'figma') {
     if (!flags.hasLayout || !flags.hasImage) {
-      console.log(chalk.red("❌ Error: For --from figma, both layout and screenshot are required."));
+      console.log(
+        chalk.red(
+          '❌ Error: For --from figma, both layout and screenshot are required.'
+        )
+      );
       process.exit(1);
     }
     if (!flags.hasTasks) {
-      console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+      console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
     }
-    return ["screenshot", "layout_json", "icon", "font"];
+    return ['screenshot', 'layout_json', 'icon', 'font'];
   }
-  if (args.from === "html") {
+  if (args.from === 'html') {
     if (!flags.hasHTML) {
-      console.log(chalk.red("❌ Error: code generation from HTML, HTML resource is required."));
+      console.log(
+        chalk.red(
+          '❌ Error: code generation from HTML, HTML resource is required.'
+        )
+      );
       process.exit(1);
     }
     if (!flags.hasTasks) {
-      console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+      console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
     }
     return ["screenshot", "html", "icon", "font", "css", "js", "png", "jpeg", "jpg"];
   }
-  if (args.from === "mockup") {
+  if (args.from === 'mockup') {
     if (!flags.mockupDocumentId) {
-      console.log(chalk.red("❌ Error: For code generation from mockup, mockup is required. It can be generated in Breeze"));
+      console.log(
+        chalk.red(
+          '❌ Error: For code generation from mockup, mockup is required. It can be generated in Breeze'
+        )
+      );
       process.exit(1);
     }
-    return ["icon", "font"];
+    return ['icon', 'font'];
   }
   return [];
 }
@@ -82,23 +94,37 @@ async function handleMockup(response, args, proj_data) {
   const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
   const mockupResponse = await axios.get(mockupDocumentUrl, {
     headers: {
-      "Content-Type": "application/json",
-      "api-key": `${proj_data.api_key}`,
+      'Content-Type': 'application/json',
+      'api-key': `${proj_data.api_key}`,
     },
   });
-  const mockupFileurl = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
-  const mockupHTML = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
-  const mockupName = mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
+  const mockupFileurl =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileUrl;
+  const mockupHTML =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.html;
+  const mockupName =
+    mockupResponse.data?.data?.metadata?.htmlContent?.[0]?.fileName;
   const mockupHasScreenshot = !!mockupFileurl;
   const mockupHasHTML = !!mockupHTML;
   if (!mockupHasScreenshot || !mockupHasHTML) {
-    console.log(chalk.red("❌ Error: For --from mockup, both screenshot and HTML are required in the mockup document."));
+    console.log(
+      chalk.red(
+        '❌ Error: For --from mockup, both screenshot and HTML are required in the mockup document.'
+      )
+    );
     process.exit(1);
   }
-  if (!Array.isArray(response.data?.tasks) || response.data.tasks.length === 0) {
-    console.log(chalk.yellow("⚠️ Warning: No tasks found."));
+  if (
+    !Array.isArray(response.data?.tasks) ||
+    response.data.tasks.length === 0
+  ) {
+    console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
   }
-  const screenShotPath = await saveMockupScreenShot(mockupFileurl, args.directory, proj_data);
+  const screenShotPath = await saveMockupScreenShot(
+    mockupFileurl,
+    args.directory,
+    proj_data
+  );
   const htmlFilePath = saveMockupHTML(mockupHTML, args.directory, mockupName);
   return { screenShotPath, htmlFilePath };
 }
@@ -108,7 +134,7 @@ async function generate_frontend_code(args) {
   let prompt_type = "figma"
   try {
     // Check CLAUDE.md file exists
-    let claudeFileValidation = await validateFileExists("CLAUDE.md");
+    let claudeFileValidation = await validateFileExists('CLAUDE.md');
     if (!claudeFileValidation) process.exit(0);
 
     // Check if only directory is provided (directory-only mode)
@@ -276,7 +302,7 @@ async function generate_frontend_code(args) {
         "Do you want to proceed? Note: It will generate better result if you provide all the required files and tasks.",
     });
     if (!proceed) {
-      console.log(chalk.red("❌ Generate process exited by user."));
+      console.log(chalk.red('❌ Generate process exited by user.'));
       process.exit(0);
     }
     await runCluade(prompt)
@@ -295,7 +321,7 @@ async function generate_frontend_code(args) {
     let message = error?.response?.data?.error
       ? error?.response?.data?.message
       : error.message;
-    console.log(chalk.red("❌ Error ::: ", message));
+    console.log(chalk.red('❌ Error ::: ', message));
     process.exit(0);
   }
 }
@@ -357,11 +383,11 @@ async function saveMockupScreenShot(fileUrl, resourceDirectory, proj_data) {
     }/documents/get-signed-url/${encodeURIComponent(filekey)}`;
   const signedUrlResponse = await axios.get(signedUrlAPI, {
     headers: {
-      "Content-Type": "application/json",
-      "api-key": `${proj_data.api_key}`,
+      'Content-Type': 'application/json',
+      'api-key': `${proj_data.api_key}`,
     },
   });
-  const outputPath = path.join(resourceDirectory, filekey.split("/").pop());
+  const outputPath = path.join(resourceDirectory, filekey.split('/').pop());
   await downloadFile(signedUrlResponse.data, outputPath);
   return outputPath;
 }
