@@ -15,6 +15,17 @@ export async function validateFileExists(filename) {
     return true;
 }
 
+export async function validateConfiguration() {
+    if (!fs.existsSync(path.join(homedir(), "./.breeze"))) {
+        console.log(chalk.red(`❌ Project not initialized. please initialize the project using this command "breeze init"`));
+        process.exit(0);
+    }
+    if (!fs.existsSync(path.join(homedir(), "./.breeze/.config"))) {
+        console.log(chalk.red(`❌ Configuration missing. Please re-initialize the project using this command "breeze init"`));
+        process.exit(0);
+    }
+}
+
 export async function fetchConfiguration() {
     let project_config_details = fs.readFileSync(path.join(homedir(), '.breeze/.config'));
     let proj_data = JSON.parse(project_config_details);
@@ -69,12 +80,12 @@ export async function killChildProcess(child) {
 }
 export async function saveResource(response, resourceDirectory, assetsDirectory, proj_data, resourceTypes) {
     const resourcePaths = {};
-    for(let resourceType of resourceTypes) {
+    for (let resourceType of resourceTypes) {
         const resources = response.data?.resources?.filter(resource => resource?.type === resourceType);
-        for(let resource of resources) {
-        const filekey = `${resource?.s3Url.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
-        console.log(chalk.blue(`🔗 File Key ${filekey}`));
-        const signedUrlAPI = `${config.ISOMETRIC_API_URL}/documents/get-signed-url/${encodeURIComponent(filekey)}`;
+        for (let resource of resources) {
+            const filekey = `${resource?.s3Url.split('amazonaws.com')?.[1]?.replace(/^\/+/, '')}`
+            console.log(chalk.blue(`🔗 File Key ${filekey}`));
+            const signedUrlAPI = `${config.ISOMETRIC_API_URL}/documents/get-signed-url/${encodeURIComponent(filekey)}`;
             let args = {
                 url: signedUrlAPI,
                 method: "GET",
@@ -85,7 +96,7 @@ export async function saveResource(response, resourceDirectory, assetsDirectory,
 
             }
             const signedUrlResponse = await httpRequests(args)
-            
+
             let outDirectory = resourceDirectory
             if (resource?.type === 'icon' || resource?.type === 'font') {
                 outDirectory = assetsDirectory
@@ -102,4 +113,17 @@ export async function saveResource(response, resourceDirectory, assetsDirectory,
     return resourcePaths;
 }
 
+export async function fetchProjectDetails(proj_data) {
+    try {
+        const fetchProjectDetails = await axios({
+            url: `https://isometric-backend.accionbreeze.com/semantic-model/byUUID/${proj_data.project_key}`,
+            headers: {
+                "Content-Type": "application/json",
+                "api-key": `${proj_data.api_key}`
+            }
+        });
+        return fetchProjectDetails;
+    } catch (error) {
 
+    }
+}
