@@ -89,7 +89,7 @@ function validateFromType(args, flags, response) {
   return [];
 }
 
-async function handleMockup(response, args, proj_data) {
+async function handleMockup(response, resourceDirectory, proj_data) {
   const mockupDocumentId = response.data?.mockupDocumentId;
   const mockupDocumentUrl = `${config.ISOMETRIC_API_URL}/documents/${mockupDocumentId}`;
   const mockupResponse = await axios.get(mockupDocumentUrl, {
@@ -120,12 +120,8 @@ async function handleMockup(response, args, proj_data) {
   ) {
     console.log(chalk.yellow('⚠️ Warning: No tasks found.'));
   }
-  const screenShotPath = await saveMockupScreenShot(
-    mockupFileurl,
-    args.directory,
-    proj_data
-  );
-  const htmlFilePath = saveMockupHTML(mockupHTML, args.directory, mockupName);
+  const screenShotPath = await saveMockupScreenShot(mockupFileurl, resourceDirectory, proj_data);
+  const htmlFilePath = saveMockupHTML(mockupHTML, resourceDirectory, mockupName);
   return { screenShotPath, htmlFilePath };
 }
 
@@ -264,9 +260,10 @@ async function generate_frontend_code(args) {
           }
         }
       } else if (args.from === "mockup") {
-        const { screenShotPath, htmlFilePath } = await handleMockup(response, args, proj_data);
         createDirectoryIfNotExists(resourceDirectory);
         createDirectoryIfNotExists(assetsDirectory);
+
+        const { screenShotPath, htmlFilePath } = await handleMockup(response, resourceDirectory, proj_data);
         await saveResource(
           response,
           resourceDirectory,
